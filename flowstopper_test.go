@@ -78,7 +78,7 @@ func TestWithRealRedis(t *testing.T) {
 	if redisServer == nil {
 		t.Fatal("redis-server didn't start")
 	}
-	defer redisServer.Process.Kill()
+	defer func() { _ = redisServer.Process.Kill() }()
 
 	connPool := redis.Pool{
 		Dial: func() (redis.Conn, error) {
@@ -88,7 +88,7 @@ func TestWithRealRedis(t *testing.T) {
 
 	flushall := func() {
 		conn := connPool.Get()
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		_, err := conn.Do("FLUSHALL")
 		if err != nil {
 			t.Fatal(err)
@@ -207,7 +207,7 @@ func runRedisServer() *exec.Cmd {
 	attempt := 0
 	for {
 		time.Sleep(100 * time.Millisecond)
-		attempt += 1
+		attempt++
 		if attempt > 100 {
 			fmt.Println("redis-server failed to come up after 10 seconds")
 			return nil

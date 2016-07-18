@@ -24,6 +24,8 @@ type Stopper struct {
 	c clock.Clock
 }
 
+// Pass sends an item through the Stopper, returning false should the
+// rate-limit for this item be exceeded.
 func (s *Stopper) Pass(item string) (bool, error) {
 	var now time.Time
 	if s.c == nil {
@@ -35,12 +37,20 @@ func (s *Stopper) Pass(item string) (bool, error) {
 	key := fmt.Sprintf("%s:%s", s.Namespace, item)
 
 	c := s.ConnPool.Get()
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
-	c.Send("MULTI")
-	c.Send("ZREMRANGEBYSCORE", key, "-inf", now.Add(s.Interval*-1).UnixNano())
-	c.Send("ZADD", key, nanonow, nanonow)
-	c.Send("ZCARD", key)
+	if err := c.Send("MULTI"); err != nil {
+		return false, err
+	}
+	if err := c.Send("ZREMRANGEBYSCORE", key, "-inf", now.Add(s.Interval*-1).UnixNano()); err != nil {
+		return false, err
+	}
+	if err := c.Send("ZADD", key, nanonow, nanonow); err != nil {
+		return false, err
+	}
+	if err := c.Send("ZCARD", key); err != nil {
+		return false, err
+	}
 
 	values, err := redis.Values(c.Do("EXEC"))
 	if err != nil {
@@ -55,7 +65,6 @@ func (s *Stopper) Pass(item string) (bool, error) {
 
 	if setsize > s.Limit {
 		return false, nil
-	} else {
-		return true, nil
 	}
+	return true, nil
 }
