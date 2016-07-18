@@ -3,13 +3,14 @@ package flowstopper
 import (
 	"bytes"
 	"fmt"
+	"os/exec"
+	"testing"
+	"time"
+
 	"github.com/WatchBeam/clock"
 	"github.com/garyburd/redigo/redis"
 	"github.com/rafaeljusto/redigomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"os/exec"
-	"testing"
-	"time"
 )
 
 var now = time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC)
@@ -60,6 +61,16 @@ func TestWithMockRedis(t *testing.T) {
 			})
 		})
 
+		Convey("When I peek", func() {
+			conn.Command("ZCARD", "fakestopper:foo").Expect(int64(0))
+			count, err := stopper.Peek("foo")
+
+			Convey("Count should be zero", func() {
+				So(err, ShouldEqual, nil)
+				So(count, ShouldEqual, 0)
+			})
+		})
+
 		Convey("When the rate is exceeded", func() {
 			exec.Expect([]interface{}{int64(0), int64(1), int64(6)})
 			passed, err := stopper.Pass("foo")
@@ -67,6 +78,15 @@ func TestWithMockRedis(t *testing.T) {
 			Convey("The action should not pass", func() {
 				So(err, ShouldEqual, nil)
 				So(passed, ShouldEqual, false)
+			})
+			Convey("When I peek", func() {
+				conn.Command("ZCARD", "fakestopper:foo").Expect(int64(6))
+				count, err := stopper.Peek("foo")
+
+				Convey("Count should be 6", func() {
+					So(err, ShouldEqual, nil)
+					So(count, ShouldEqual, 6)
+				})
 			})
 		})
 	})
@@ -132,6 +152,15 @@ func TestWithRealRedis(t *testing.T) {
 
 			Convey("All three actions should pass", func() {
 				So(results, ShouldResemble, [3]bool{true, true, true})
+			})
+
+			Convey("When I peek", func() {
+				count, err := stopper.Peek("foo")
+
+				Convey("Count should be 3", func() {
+					So(err, ShouldEqual, nil)
+					So(count, ShouldEqual, 3)
+				})
 			})
 
 			Convey("The fourth action should fail", func() {

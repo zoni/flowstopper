@@ -2,9 +2,10 @@ package flowstopper
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/WatchBeam/clock"
 	"github.com/garyburd/redigo/redis"
-	"time"
 )
 
 // Stopper is an instance of a rate limiter.
@@ -67,4 +68,13 @@ func (s *Stopper) Pass(item string) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+// Peek returns the number of items passed during the current interval.
+func (s *Stopper) Peek(item string) (int64, error) {
+	c := s.ConnPool.Get()
+	defer func() { _ = c.Close() }()
+
+	key := fmt.Sprintf("%s:%s", s.Namespace, item)
+	return redis.Int64(c.Do("ZCARD", key))
 }
